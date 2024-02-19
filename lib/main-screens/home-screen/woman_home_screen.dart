@@ -1,0 +1,200 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fluttertoast/fluttertoast.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
+import 'package:streesathi/const/constants.dart';
+import 'package:streesathi/widgets/home/ai_chat.dart';
+import 'package:streesathi/widgets/home/emergency.dart';
+import 'package:streesathi/widgets/home/services.dart';
+import 'package:streesathi/widgets/home/insta_share/insta_share.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+class WifeHomeScreen extends ConsumerStatefulWidget {
+  const WifeHomeScreen({Key? key}) : super(key: key);
+
+  @override
+  ConsumerState<ConsumerStatefulWidget> createState() => _WifeHomeScreenState();
+}
+
+class _WifeHomeScreenState extends ConsumerState<WifeHomeScreen> {
+  final User? user = FirebaseAuth.instance.currentUser;
+  final String currentVersion = "1.0.0";
+  Position? _currentPosition;
+  String? _currentAddress;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUpdate();
+    _getCurrentLocation();
+    updateLastLogin();
+  }
+
+  //Remove this function to cancel checkUpdates everytime wife home screen is opened
+  _checkUpdate() async {
+    print('The uid of the current user is');
+    print(user!.uid);
+    DocumentSnapshot versionDetails = await FirebaseFirestore.instance
+        .collection('pregAthI')
+        .doc('version')
+        .get();
+
+    if (currentVersion != versionDetails['latestVersion']) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text(
+              'A newer version of the app is available. Please download to continue.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 20),
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () async {
+                  String googleUrl =
+                      'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
+
+                  final Uri _url = Uri.parse(googleUrl);
+                  try {
+                    await launchUrl(_url);
+                  } catch (e) {
+                    Fluttertoast.showToast(msg: 'Error');
+                  }
+                },
+                child: const Text('Download'),
+              ),
+            ],
+            actionsAlignment: MainAxisAlignment.center,
+          ),
+        ),
+      );
+    }
+  }
+
+  updateLastLogin() {
+    DateTime now = DateTime.now();
+    var formatterDate = DateFormat('dd/MM/yy').format(now);
+    var formatterTime = DateFormat('kk:mm').format(now);
+    FirebaseFirestore.instance.collection('users').doc(user!.uid).update({
+      'lastLogin': '${formatterTime}, ${formatterDate}',
+    });
+  }
+
+
+  
+
+  _getCurrentLocation() async {
+    Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+      forceAndroidLocationManager: true,
+    ).then((Position position) {
+      setState(() {
+        _currentPosition = position;
+        _getAddressFromLaLo();
+      });
+    }).catchError((e) {
+      Fluttertoast.showToast(msg: e.toString());
+    });
+  }
+
+  _getAddressFromLaLo() async {
+    try {
+      List<Placemark> placeMarks = await placemarkFromCoordinates(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+      );
+
+      Placemark place = placeMarks[0];
+      setState(() {
+        _currentAddress =
+            "${place.locality},${place.postalCode},${place.street},${place.name},${place.subLocality}";
+        FirebaseFirestore.instance.collection('users').doc(user!.uid).update({
+          'currentAddress': _currentAddress,
+          'currentLatitude': _currentPosition!.latitude.toString(),
+          'currentLongitude': _currentPosition!.longitude.toString(),
+        });
+      });
+    } catch (e) {
+      Fluttertoast.showToast(msg: e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          'streeSathi',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Color.fromARGB(255, 0, 0, 0),
+            fontSize: 25,
+          ),
+        ),
+        automaticallyImplyLeading: false,
+        centerTitle: true,
+        backgroundColor: primaryColor,
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(top: 8.0, bottom: 8, left: 15),
+                    child: Text(
+                      'Emergency',
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const Emergency(),
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(top: 8.0, bottom: 8, left: 15),
+                    child: Text(
+                      'Services',
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const Services(),
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(top: 8.0, bottom: 8, left: 15),
+                    child: Text(
+                      'Insta-Share',
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const InstaShare(),
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(top: 8.0, bottom: 8, left: 15),
+                    child: Text(
+                      'AI Chat',
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const AIChat(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
